@@ -1,0 +1,232 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-heading);
+}
+
+:root {
+  --background: #fafcf8;
+  --foreground: #1a2e23;
+  --card: #ffffff;
+  --card-foreground: #1a2e23;
+  --primary: #15573a;
+  --primary-foreground: #f2fbf5;
+  --secondary: #ecf7f0;
+  --secondary-foreground: #15573a;
+  --muted: #f5f7f5;
+  --muted-foreground: #5a7567;
+  --accent: #d97706;
+  --accent-foreground: #ffffff;
+  --border: #e2ebe6;
+  --ring: #10b981;
+  --destructive: #dc2626;
+  --radius: 0.75rem;
+  --font-heading: "Fraunces", Georgia, serif;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-devanagari: "Noto Sans Devanagari", sans-serif;
+}
+
+:lang(hi), :lang(mr) {
+  --font-heading: "Noto Sans Devanagari", "Plus Jakarta Sans", sans-serif;
+  --font-body: "Noto Sans Devanagari", "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-devanagari);
+}
+
+:lang(hi) h1, :lang(hi) h2, :lang(hi) h3, :lang(hi) h4, :lang(hi) .font-display,
+:lang(mr) h1, :lang(mr) h2, :lang(mr) h3, :lang(mr) h4, :lang(mr) .font-display {
+  font-family: var(--font-devanagari) !important;
+}
+
+.dark {
+  --background: #09170f;
+  --foreground: #eef7f1;
+  --card: #10261a;
+  --card-foreground: #eef7f1;
+  --primary: #34d399;
+  --primary-foreground: #022c16;
+  --secondary: #173625;
+  --secondary-foreground: #6ee7b7;
+  --muted: #173625;
+  --muted-foreground: #94b89f;
+  --accent: #f59e0b;
+  --accent-foreground: #09170f;
+  --border: #1e4530;
+  --ring: #34d399;
+  --destructive: #ef4444;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--background);
+  color: var(--foreground);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glassmorphism - refined */
+.glass-nav {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 235, 230, 0.7);
+}
+
+/* Subtle scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #dbe7df transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #dbe7df;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #b6cec0;
+}
+
+/* Keyframes & Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(0.5deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmerGlow {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Animation Utility Classes */
+.animate-float {
+  animation: float 3.5s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Card Lift & Spring Utilities */
+.card-hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.card-hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -6px rgba(16, 78, 43, 0.1), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-spring {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s ease;
+}
+
+.btn-spring:active {
+  transform: scale(0.96);
+}
+
+.btn-spring:hover {
+  filter: brightness(1.04);
+}
+
+/* Smooth page transitions */
+.page-enter {
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

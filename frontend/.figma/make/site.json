@@ -1,0 +1,10 @@
+{
+  "description": "Connects farmers and buyers through a secure marketplace enabling product listings, orders, and role-based access for efficient agricultural trade.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
