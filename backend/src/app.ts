@@ -28,9 +28,24 @@ import { publicApiLimiter } from "./middleware/rateLimit";
 const app: Application = express();
 
 // --- Core middleware ---
+const allowedOrigins = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:8443", "http://localhost:5173"];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, health-check probes)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        process.env.NODE_ENV !== "production"
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS origin '${origin}' not permitted.`));
+    },
     credentials: true, // required so the refresh-token cookie is sent/received
   })
 );

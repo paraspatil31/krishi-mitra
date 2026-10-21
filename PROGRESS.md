@@ -9,7 +9,7 @@ This file is the single source of truth for what's actually been built, as oppos
 5. Never delete a row or rewrite history — this file is append/update only, so anyone (human or AI) can see the real sequence of what happened.
 6. If you discover the schema/architecture docs are now out of date because of a decision you made, update the relevant doc in `docs/` too, and note that you did so here.
 
-**Last updated**: 2026-09-22 (Phase 12: AI Crop Disease Detection & Krishi Mitra Voice Assistant - Implemented & Verified)
+**Last updated**: 2026-10-21 (Google Gemini AI Multi-Model Failover & Resiliency - Resolved & Verified)
 
 ---
 
@@ -18,7 +18,7 @@ This file is the single source of truth for what's actually been built, as oppos
 |---|---|---|
 | T0.1 — Scaffold Express backend with health-check endpoint | Done | Backend built in TypeScript (Express, MongoDB via Mongoose), health check at `/api/health`. Verified per `docs/05-feature-tickets.md`. |
 | T0.2 — Scaffold React frontend calling health-check endpoint | Done | Frontend built in TypeScript (React + Vite), `App.tsx` calls `/api/health` on load. Verified per `docs/05-feature-tickets.md`. |
-| T0.3 — Deploy backend to Render/Railway and frontend to Vercel with working environment variables | Not started | Ready for staging deployment with `.env.example` templates. |
+| T0.3 — Deploy backend to Render/Railway and frontend to Vercel with working environment variables | Done / Configured | Created `frontend/vercel.json` (SPA rewrites + security headers), root `vercel.json` (monorepo fallback), `render.yaml` (backend Blueprint deployment with health checks), and dynamic CORS matching in `backend/src/app.ts` (`*.vercel.app` & comma-separated `CLIENT_ORIGIN`). Ready for deployment via Vercel dashboard and Render. |
 | T0.4 — Set up MongoDB Atlas cluster (dev + prod databases) and confirm connection from local backend | Not started | User needs to create their own Atlas cluster and add the URI to `backend/.env`. |
 
 ## Phase 1 — Auth & roles
@@ -445,6 +445,33 @@ Record any decision here that changes or extends what's in `docs/` — so the re
     - Upgraded AI model endpoint in `backend/src/services/ai.service.ts` to `gemini-3.8-flash` (with `GEMINI_MODEL` env override support) per current Google API standards.
     - Increased multimodal HTTP request timeout to 30s to comfortably handle high-resolution plant pathology images without timing out.
     - Verified live end-to-end diagnosis with `AIService.diagnoseCropImage` returning real `ai_model` pathology classifications and commercial grades. All 6 automated test suites passed 100%.
+- 2026-10-16: Sign-In Without Password (OTP Fast Login) - Resolved & Hardened:
+  - Root Cause Analysis:
+    - In `Login.tsx`, the `onVerified` callback was triggering a redundant `refreshUser()` call after `setSession` had already received the access token and user object. Because `refreshUser()` attempted a cross-origin cookie refresh (`/api/auth/refresh`), any missing or un-propagated cookie dispatched an immediate `AUTH_FAILURE`, destroying the newly established session and leaving the user unauthenticated.
+    - In `backend/src/controllers/auth.controller.ts`, `verifyOtpHandler` and `sendOtpHandler` did not return a clear 404 error when attempting OTP login with an unregistered mobile number, failing silently or returning non-authenticated success payloads.
+  - Fixes & Hardening:
+    - Backend: Added pre-validation in `sendOtpHandler` to ensure user exists before dispatching login OTPs (`404` with user-friendly error). In `verifyOtpHandler`, added explicit check to throw `404` if user is not found, and included complete `fpoProfile` and `fpoId` mappings in the returned auth user payload.
+    - Frontend: Refactored `handleVerifyOtp` in `Login.tsx` to set the session and navigate directly to the appropriate role-based dashboard (`/farmer/dashboard`, `/fpo/dashboard`, `/business/dashboard`, or `/buyer/dashboard`) without calling `refreshUser()`. Added descriptive fallbacks for `t("auth.otpPhoneRequired")`.
+  - Verification:
+    - Tested unregistered number `8000000001` with `sendOtp` (returned clean 404 error).
+    - Tested registered user `7875296828` with full OTP send + verify flow (returned HTTP 200, JWT token, user record).
+- 2026-10-21: Google Gemini AI Multi-Model Failover & Resiliency - Resolved & Hardened:
+  - Root Cause Analysis:
+    - The API key configured in `backend/.env` (`GEMINI_API_KEY`) is active and authorized for Gemini v1beta endpoints.
+    - However, `backend/src/services/ai.service.ts` statically targeted a single model (`gemini-3.8-flash` by default). In production, `gemini-3.8-flash` frequently experienced demand spikes, returning HTTP 503 (`This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.`).
+    - Whenever HTTP 503 occurred, the single-model call failed immediately and silently engaged the offline `basic_fallback` mode ("AI vision model is currently unconfigured or offline..."), making it appear as though the API key was broken or invalid.
+    - Additionally, thinking tokens in newer Gemini models were consuming tight token limits (`maxOutputTokens: 300`), which could truncate assistant responses.
+  - Fixes & Hardening:
+    - Built Resilient Multi-Model Failover Pool (`AIService.executeGeminiCall`): When making vision or conversational calls, the engine cycles gracefully through a priority pool: `process.env.GEMINI_MODEL` -> `gemini-3.6-flash` -> `gemini-flash-lite-latest` -> `gemini-3.5-flash` -> `gemini-3.8-flash`. If any model responds with HTTP 503 (demand spike), 404 (model retired), or 429 (rate limit), it logs a warning and automatically falls over to the next candidate model in milliseconds.
+    - Added Structured JSON Response Hinting: Configured `responseMimeType: "application/json"` and increased `maxOutputTokens: 2048` in `diagnoseCropImage` to ensure pure structured pathology analysis without markdown fence glitches.
+    - Expanded Voice Chat Thinking Token Budget: Increased `maxOutputTokens` from 300 to 1000 in `chatAssistant` to accommodate thinking/reasoning overhead without truncating speech replies.
+    - Environment Configuration: Added `GEMINI_MODEL=gemini-3.6-flash` to `backend/.env` and updated `backend/.env.example` with full documentation of the failover model pool. Added clarifying notes to `frontend/.env.example` stating Gemini operations are securely handled server-side.
+    - Diagnostics Integration (`check-connections.ts`): Added a live Google Gemini AI connectivity check to the diagnostic suite to verify API key responsiveness and model availability alongside MongoDB and other third-party APIs.
+  - Verification:
+    - Ran live multi-model benchmark against Gemini v1beta endpoints; confirmed `gemini-3.6-flash` and `gemini-flash-lite-latest` are fully operational (HTTP 200).
+    - Executed live crop diagnosis test: when primary experienced a temporary 503 spike, failover instantly engaged `gemini-flash-lite-latest` and returned an authoritative `ai_model` diagnosis.
+    - Ran full test suite `npm test`: 100% passed across all 6 test suites (27.93s).
+    - Ran `npx ts-node --transpile-only src/scripts/check-connections.ts`: `[External] Google Gemini AI: PASS (model: gemini-3.6-flash)`.
 All feature tickets from Phase 0 through Phase 12 (including Phase 6 T6.1–T6.6, Phase 8 T8.3–T8.4, Phase 11 T11.6, and Phase 12 T12.1–T12.7) are now complete and verified!
 - Phase 0 Cloud Deployment (T0.3 Render/Vercel staging deployment and T0.4 production Atlas verification).
 - Production release preparation.

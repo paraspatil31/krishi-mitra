@@ -25,6 +25,15 @@ export async function sendOtpHandler(req: Request, res: Response, next: NextFunc
     const purpose = req.body.purpose || "verify_phone";
 
     const validPhone = validatePhone(rawPhone);
+
+    // If purpose is login, ensure an account actually exists before sending OTP
+    if (purpose === "login") {
+      const existingUser = await User.findOne({ phone: validPhone });
+      if (!existingUser) {
+        throw new AppError("No account found with this mobile number. Please check your number or sign up first.", 404);
+      }
+    }
+
     const result = await sendOtp(validPhone, purpose);
     res.status(200).json({ data: result });
   } catch (err) {
@@ -49,34 +58,38 @@ export async function verifyOtpHandler(req: Request, res: Response, next: NextFu
     // If purpose is login, log the user in immediately if account exists
     if (purpose === "login") {
       const user = await User.findOne({ phone: validPhone });
-      if (user) {
-        user.isPhoneVerified = true;
-        await user.save();
-
-        const payload = { sub: user.id, role: user.role, buyerType: user.buyerType };
-        const accessToken = signAccessToken(payload);
-        const refreshToken = signRefreshToken(payload);
-        res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
-
-        const response: AuthResponse = {
-          accessToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            phone: user.phone,
-            role: user.role,
-            avatar: user.avatar,
-            district: user.district,
-            location: user.location,
-            buyerType: user.buyerType,
-            businessProfile: user.businessProfile,
-            isVerifiedBuyer: user.isVerifiedBuyer,
-            isPhoneVerified: true,
-          } as any,
-        };
-        res.status(200).json({ data: response, message: "Logged in successfully via verified OTP" });
-        return;
+      if (!user) {
+        throw new AppError("No account found with this mobile number. Please check your number or sign up first.", 404);
       }
+
+      user.isPhoneVerified = true;
+      await user.save();
+
+      const payload = { sub: user.id, role: user.role, buyerType: user.buyerType };
+      const accessToken = signAccessToken(payload);
+      const refreshToken = signRefreshToken(payload);
+      res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
+
+      const response: AuthResponse = {
+        accessToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+          avatar: user.avatar,
+          district: user.district,
+          location: user.location,
+          buyerType: user.buyerType,
+          businessProfile: user.businessProfile,
+          fpoProfile: user.fpoProfile,
+          fpoId: user.fpoId,
+          isVerifiedBuyer: user.isVerifiedBuyer,
+          isPhoneVerified: true,
+        } as any,
+      };
+      res.status(200).json({ data: response, message: "Logged in successfully via verified OTP" });
+      return;
     }
 
     res.status(200).json({ data: result });
@@ -177,25 +190,65 @@ export async function login(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { phone: rawPhone, password } = req.body;
+    const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
+    const { password } = req.body;
 
-    if (!rawPhone || !password) {
-      throw new AppError("Phone and password are required", 400);
+    if (!rawIdentifier || !password) {
+      throw new AppError("Phone/Email and password are required", 400);
     }
 
-    const phone = validatePhone(rawPhone);
-    const user = await User.findOne({ phone });
+    const trimmed = String(rawIdentifier).trim();
+    const isEmail = trimmed.includes("@");
 
     // Generic error for account enumeration protection
     const invalidCredentialsError = new AppError("Invalid phone number or password", 401);
 
-    if (!user) {
-      throw invalidCredentialsError;
-    }
+    let user: any = null;
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      throw invalidCredentialsError;
+    if (isEmail) {
+      let email: string | undefined;
+      try {
+        email = validateEmail(trimmed);
+      } catch {
+        throw invalidCredentialsError;
+      }
+      if (!email) {
+        throw invalidCredentialsError;
+      }
+
+      const candidates = await User.find({ email: email.toLowerCase() });
+      if (!candidates || candidates.length === 0) {
+        throw invalidCredentialsError;
+      }
+
+      for (const candidate of candidates) {
+        const isMatch = await candidate.comparePassword(password);
+        if (isMatch) {
+          user = candidate;
+          break;
+        }
+      }
+
+      if (!user) {
+        throw invalidCredentialsError;
+      }
+    } else {
+      let phone: string;
+      try {
+        phone = validatePhone(trimmed);
+      } catch {
+        throw invalidCredentialsError;
+      }
+
+      user = await User.findOne({ phone });
+      if (!user) {
+        throw invalidCredentialsError;
+      }
+
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        throw invalidCredentialsError;
+      }
     }
 
     const payload = { sub: user.id, role: user.role, buyerType: user.buyerType };

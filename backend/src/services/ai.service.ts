@@ -3,10 +3,60 @@ import { CropDiagnosisResponse, AIChatResponse } from "../types/ai.types";
 import { matchVoiceCommand } from "../config/voiceCommands.locales";
 import Order from "../models/Order";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
 export class AIService {
+  /**
+   * Resiliently executes Google Gemini generateContent with automatic multi-model failover.
+   * If a model returns 503 (demand spike), 404 (model not found/deprecated), or 429 (rate limit),
+   * it seamlessly tries the next healthy candidate in the priority chain.
+   */
+  private static async executeGeminiCall(apiKey: string, payload: any, timeoutMs: number = 30000): Promise<any> {
+    const configuredModel = process.env.GEMINI_MODEL?.trim();
+    // Candidate priority list: configured model -> gemini-3.6-flash -> gemini-flash-lite-latest -> gemini-3.5-flash -> gemini-3.8-flash
+    const candidateModels = Array.from(
+      new Set(
+        [
+          configuredModel,
+          "gemini-3.6-flash",
+          "gemini-flash-lite-latest",
+          "gemini-3.5-flash",
+          "gemini-3.8-flash",
+        ].filter((m): m is string => Boolean(m && m.length > 0))
+      )
+    );
+
+    let lastError: any = null;
+
+    for (const model of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await axios.post(url, payload, {
+          headers: { "Content-Type": "application/json" },
+          timeout: timeoutMs,
+        });
+
+        if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return response.data;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const status = err.response?.status;
+        const errMsg = err.response?.data?.error?.message || err.message;
+        // If 503 (Demand Spike), 404 (Not Found/Deprecated), or 429 (Rate Limit), failover to next model
+        if (status === 503 || status === 404 || status === 429) {
+          console.warn(`[Gemini AI] Model ${model} returned HTTP ${status} (${errMsg}). Failing over to next model in pool...`);
+          continue;
+        }
+        // If it's a client bad request (400) or unauthorized key (401/403), stop cycling
+        if (status === 400 || status === 401 || status === 403) {
+          console.error(`[Gemini AI] Authentication/request error with model ${model} (HTTP ${status}):`, errMsg);
+          throw err;
+        }
+      }
+    }
+
+    throw lastError || new Error("All Gemini candidate models failed to return content.");
+  }
+
   /**
    * Diagnoses crop health and inspects quality control.
    * STRICT SAFETY RULE:
@@ -67,16 +117,13 @@ Note: Return pure JSON without markdown code fences if possible, or inside stand
           ],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 1200,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json",
           },
         };
 
-        const response = await axios.post(`${GEMINI_API_URL}?key=${apiKey}`, payload, {
-          headers: { "Content-Type": "application/json" },
-          timeout: 30000,
-        });
-
-        const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const data = await this.executeGeminiCall(apiKey, payload, 30000);
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const jsonMatch = rawText.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
@@ -105,7 +152,7 @@ Note: Return pure JSON without markdown code fences if possible, or inside stand
           };
         }
       } catch (err: any) {
-        console.warn("Gemini vision diagnosis failed or timed out, falling back safely:", err?.message || err);
+        console.warn("Gemini vision diagnosis failed or timed out across all candidate models, falling back safely:", err?.message || err);
       }
     }
 
@@ -314,19 +361,19 @@ Guidelines:
 
         contents.push({ role: "user", parts: [{ text: trimmed }] });
 
-        const response = await axios.post(
-          `${GEMINI_API_URL}?key=${apiKey}`,
+        const data = await this.executeGeminiCall(
+          apiKey,
           {
             contents,
             generationConfig: {
               temperature: 0.3,
-              maxOutputTokens: 300,
+              maxOutputTokens: 1000,
             },
           },
-          { timeout: 15000 }
+          15000
         );
 
-        const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
           // Check if reply suggests a specific action
           let action: { type: "navigate"; path: string; label: string } | undefined = undefined;

@@ -15,7 +15,7 @@ export default function Login() {
   const location = useLocation();
 
   const from = (location.state as { from?: Location })?.from?.pathname;
-  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,14 +34,22 @@ export default function Login() {
     return <Navigate to={destination} replace />;
   }
 
-  const cleanPhone = phone.trim().replace(/[\s\-()]/g, "").slice(-10);
+  const cleanIdentifier = identifier.trim();
+  const isEmail = cleanIdentifier.includes("@");
+  const cleanPhone = cleanIdentifier.replace(/[\s\-()]/g, "").slice(-10);
   const isPhoneValid = /^[6-9]\d{9}$/.test(cleanPhone);
+  const isEmailValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleanIdentifier);
+  const isIdentifierValid = isEmail ? isEmailValid : isPhoneValid;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!isPhoneValid) {
-      setError(t("auth.phoneRequired"));
+    if (!isIdentifierValid) {
+      setError(
+        isEmail
+          ? "Please enter a valid email address."
+          : t("auth.phoneRequired", "Please enter a valid 10-digit Indian phone number starting with 6-9 or email.")
+      );
       return;
     }
     if (!password) {
@@ -50,7 +58,12 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      await login({ phone: cleanPhone, password });
+      await login({
+        phone: isEmail ? undefined : cleanPhone,
+        email: isEmail ? cleanIdentifier : undefined,
+        identifier: cleanIdentifier,
+        password,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : t("auth.loginFailed"));
     } finally {
@@ -67,16 +80,29 @@ export default function Login() {
   }
 
   async function handleVerifyOtp(phoneNumber: string, code: string) {
-    const res = await api.post<{ data: any }>("/auth/otp/verify", {
+    const res = await api.post<{ data: any; message?: string }>("/auth/otp/verify", {
       phone: phoneNumber,
       otp: code,
       purpose: "login",
     });
 
-    if (res.data?.accessToken && res.data?.user) {
-      setSession(res.data.user, res.data.accessToken);
-    } else if (res.data?.accessToken) {
-      await refreshUser();
+    const authData = res.data;
+    if (authData?.accessToken && authData?.user) {
+      setSession(authData.user, authData.accessToken);
+      const destination =
+        from ??
+        (authData.user.role === "farmer"
+          ? "/farmer/dashboard"
+          : authData.user.role === "fpo"
+          ? "/fpo/dashboard"
+          : authData.user.role === "admin"
+          ? "/admin/dashboard"
+          : authData.user.buyerType === "business"
+          ? "/business/dashboard"
+          : "/buyer/dashboard");
+      navigate(destination, { replace: true });
+    } else {
+      throw new Error(res.message || "Failed to log in via OTP");
     }
     return res;
   }
@@ -154,16 +180,18 @@ export default function Login() {
 
             <div>
               <Input
-                label={t("auth.mobileNumber")}
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder={t("auth.phonePlaceholder")}
+                label="Mobile Number or Email"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="10-digit mobile or email address"
                 required
               />
-              {phone && !isPhoneValid && (
+              {cleanIdentifier && !isIdentifierValid && (
                 <p className="mt-1 text-[11px] text-red-500 font-medium">
-                  {t("auth.phoneValidation")}
+                  {isEmail
+                    ? "Enter a valid email address"
+                    : "Must be a valid 10-digit number (starting with 6-9) or email"}
                 </p>
               )}
             </div>
@@ -177,7 +205,7 @@ export default function Login() {
                   type="button"
                   onClick={() => {
                     if (!isPhoneValid) {
-                      setError(t("auth.otpPhoneRequired"));
+                      setError(t("auth.otpPhoneRequired", "Please enter a valid 10-digit mobile number above to sign in via OTP."));
                       return;
                     }
                     setError("");
@@ -211,7 +239,7 @@ export default function Login() {
               type="button"
               onClick={() => {
                 if (!isPhoneValid) {
-                  setError(t("auth.otpPhoneRequired"));
+                  setError(t("auth.otpPhoneRequired", "Please enter a valid 10-digit mobile number above to sign in via OTP."));
                   return;
                 }
                 setError("");
@@ -241,9 +269,6 @@ export default function Login() {
         onClose={() => setShowOtpModal(false)}
         onVerified={() => {
           setShowOtpModal(false);
-          refreshUser().then(() => {
-            navigate(from ?? "/");
-          });
         }}
         onSendOtp={handleSendOtp}
         onVerifyOtp={handleVerifyOtp}

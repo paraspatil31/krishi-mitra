@@ -141,7 +141,9 @@ export interface AuthResponse {
 }
 
 export interface LoginCredentials {
-  phone: string;
+  phone?: string;
+  email?: string;
+  identifier?: string;
   password: string;
 }
 

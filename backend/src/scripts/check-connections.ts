@@ -54,7 +54,7 @@ async function runDiagnostics() {
     }
   }
 
-  const optionalEnv = ["PORT", "CLIENT_ORIGIN", "DATA_GOV_API_KEY", "FCM_SERVER_KEY", "RAZORPAY_KEY_ID"];
+  const optionalEnv = ["PORT", "CLIENT_ORIGIN", "DATA_GOV_API_KEY", "GEMINI_API_KEY", "GEMINI_MODEL", "FCM_SERVER_KEY", "RAZORPAY_KEY_ID"];
   for (const envVar of optionalEnv) {
     if (process.env[envVar]) {
       record("Config", envVar, "PASS", `Configured (${process.env[envVar]?.slice(0, 8)}...)`);
@@ -208,6 +208,35 @@ async function runDiagnostics() {
     }
   } else {
     record("External", "Data.gov.in Mandi API", "WARN", "DATA_GOV_API_KEY not configured (using cached/fallback rates)");
+  }
+
+  // Google Gemini AI Engine
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+      const geminiRes = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          contents: [{ parts: [{ text: "ping" }] }],
+          generationConfig: { maxOutputTokens: 10 },
+        },
+        { timeout: 10000 }
+      );
+      if (geminiRes.status === 200 && geminiRes.data?.candidates?.[0]?.content) {
+        record(
+          "External",
+          "Google Gemini AI",
+          "PASS",
+          `Connected and responsive via model '${model}' (Phase 12 Crop Doctor & Voice AI active)`
+        );
+      } else {
+        record("External", "Google Gemini AI", "WARN", `Unexpected response format from model '${model}'`);
+      }
+    } catch (err: any) {
+      record("External", "Google Gemini AI", "WARN", `Gemini API check warning: ${err?.response?.data?.error?.message || err.message}`);
+    }
+  } else {
+    record("External", "Google Gemini AI", "WARN", "GEMINI_API_KEY not configured (safe basic fallback mode active)");
   }
 
   // SUMMARY REPORT
