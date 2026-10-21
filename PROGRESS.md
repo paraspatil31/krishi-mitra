@@ -18,7 +18,7 @@ This file is the single source of truth for what's actually been built, as oppos
 |---|---|---|
 | T0.1 — Scaffold Express backend with health-check endpoint | Done | Backend built in TypeScript (Express, MongoDB via Mongoose), health check at `/api/health`. Verified per `docs/05-feature-tickets.md`. |
 | T0.2 — Scaffold React frontend calling health-check endpoint | Done | Frontend built in TypeScript (React + Vite), `App.tsx` calls `/api/health` on load. Verified per `docs/05-feature-tickets.md`. |
-| T0.3 — Deploy backend to Render/Railway and frontend to Vercel with working environment variables | Done / Configured | Created `frontend/vercel.json` (SPA rewrites + security headers), root `vercel.json` (monorepo fallback), `render.yaml` (backend Blueprint deployment with health checks), and dynamic CORS matching in `backend/src/app.ts` (`*.vercel.app` & comma-separated `CLIENT_ORIGIN`). Ready for deployment via Vercel dashboard and Render. |
+| T0.3 — Deploy backend to Render/Railway and frontend to Vercel with working environment variables | Done | Successfully deployed to production with live verified connectivity: Frontend on Vercel (`https://krishi-mitra-ten-pi.vercel.app`), Backend on Render (`https://krishi-mitra-y77x.onrender.com`). Health check `/api/health` responding HTTP 200, MongoDB Atlas connected, and daily mandi & weather cron jobs registered. |
 | T0.4 — Set up MongoDB Atlas cluster (dev + prod databases) and confirm connection from local backend | Not started | User needs to create their own Atlas cluster and add the URI to `backend/.env`. |
 
 ## Phase 1 — Auth & roles
